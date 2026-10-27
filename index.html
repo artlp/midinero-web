@@ -120,6 +120,7 @@ dialog::backdrop { background: rgb(0 0 0 / .4) }
     <div class="brand"><h1>Bluecoins Web</h1><small id="meta" class="muted">Web version of your Bluecoins data</small></div>
     <div class="actions">
       <button id="forget" type="button" hidden>Forget file</button>
+      <button id="dbx-switch" type="button" hidden></button>
       <button id="savecopy" type="button" hidden>Save for Drive</button>
       <button id="drive-repick" type="button" hidden title="Choose bluecoins.fydb and tracker_file in Google Drive again">Pick Drive files</button>
       <button id="drive-reload" type="button" hidden>Reload from Drive</button>
@@ -131,10 +132,11 @@ dialog::backdrop { background: rgb(0 0 0 / .4) }
   <section id="empty" class="drop">
     <h2>Open your Bluecoins data</h2>
     <p class="muted">Bluecoins Web lets you view and edit the finances you keep in the Bluecoins Android app from any browser: account balances, transactions, transfers and monthly reports. It opens the sync files Bluecoins keeps in your Google Drive or Dropbox, and saves your edits back to them so the phone app picks them up. Everything is processed in this browser; there is no server.</p>
-    <p class="muted">With Google Drive, the app only gets access to the two files you pick (<b>bluecoins.fydb</b> and <b>tracker_file</b>), never the rest of your Drive. With Dropbox, it finds the folder holding <b>tracker_file</b> by itself and stays signed in on this browser. You can also open a downloaded <b>.fydb</b> file instead.</p>
+    <p class="muted">With Google Drive, the app only gets access to the two files you pick (<b>bluecoins.fydb</b> and <b>tracker_file</b>), never the rest of your Drive. With Dropbox, it finds the folder holding <b>tracker_file</b> by itself and stays signed in on this browser; data that MiDinero syncs to Dropbox (folder <b>/MiDinero</b>) opens the same way. You can also open a downloaded <b>.fydb</b> file instead.</p>
     <div class="actions">
       <button id="drive-open" class="primary" type="button">Open from Google Drive</button>
-      <button id="dbx-open" class="primary" type="button">Open from Dropbox</button>
+      <button id="dbx-open" class="primary" type="button">Open Bluecoins from Dropbox</button>
+      <button id="dbx-open-md" class="primary" type="button">Open MiDinero from Dropbox</button>
       <label class="btn" for="file">Open file</label>
       <input id="file" type="file" accept=".fydb" hidden>
     </div>
@@ -435,7 +437,7 @@ function renderTransactions() {
 function updateMeta() {
   const when = d => new Date(d).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   $('#meta').textContent = drive
-    ? `${drive.db.name} · ${drive.dbx ? 'Dropbox' : 'Google Drive'}, changed ${when(drive.db.modifiedTime)} · ${D.list.length.toLocaleString()} transactions`
+    ? `${drive.db.name} · ${drive.dbx ? 'Dropbox · ' + appName(drive.dbx) : 'Google Drive'}, changed ${when(drive.db.modifiedTime)} · ${D.list.length.toLocaleString()} transactions`
     : `${D.name} · file on this device · ${D.list.length.toLocaleString()} transactions`;
 }
 
@@ -650,6 +652,8 @@ function updateSaveUI() {
   $('#drive-reload').hidden = !(has && drive);
   $('#drive-reload').textContent = `Reload from ${cloudName()}`;
   $('#drive-repick').hidden = !(has && drive && !drive.dbx);
+  $('#dbx-switch').hidden = !(has && drive?.dbx);
+  $('#dbx-switch').textContent = `Open ${appName(otherApp())} data`;
   $('#savecopy').hidden = !has || !!drive;
   $('#forget').hidden = !has || !!drive;
 }
@@ -907,35 +911,45 @@ async function dfetch(endpoint, arg, body) {
   return r;
 }
 
+// Two sources: Bluecoins' own sync folder, or the fixed folder MiDinero uploads bluecoins.fydb + tracker_file (+ its .sql) to.
+// drive.dbx holds which one is open; the last choice is remembered. Old saved state has dbx: true, which reads as Bluecoins.
+const MIDINERO_DIR = '/MiDinero';
+const dbxApp = () => store.get('bcw-dbx-app') === 'midinero' ? 'midinero' : 'bluecoins';
+const otherApp = () => (drive?.dbx || dbxApp()) === 'midinero' ? 'bluecoins' : 'midinero';
+const appName = a => a === 'midinero' ? 'MiDinero' : 'Bluecoins';
 // Bluecoins' sync folder is wherever tracker_file sits next to a .fydb; found by search once, then remembered.
-async function dbxFilesIn(folder) {
+async function dbxFilesIn(folder, app = 'bluecoins') {
   const { entries } = await (await dfetch('files/list_folder', { path: folder })).json();
   const tracker = entries.find(f => f.name === 'tracker_file');
   const db = entries.filter(f => f['.tag'] === 'file' && f.name.endsWith('.fydb') && !f.name.startsWith('bluecoins-web-backup'))
     .sort((a, b) => b.server_modified.localeCompare(a.server_modified))[0];
-  return tracker && db ? { dbx: true, db: { name: db.name, path: db.path_display, rev: db.rev, modifiedTime: db.server_modified }, tracker: { path: tracker.path_display } } : null;
+  return tracker && db ? { dbx: app, db: { name: db.name, path: db.path_display, rev: db.rev, modifiedTime: db.server_modified }, tracker: { path: tracker.path_display } } : null;
 }
-async function dbxFind() {
+async function dbxFind(app) {
+  if (app === 'midinero') return dbxFilesIn(MIDINERO_DIR, app).catch(e => { if (/ 409/.test(e.message)) return null; throw e; }); // 409: no such folder yet
   const saved = store.get('bcw-dbx-folder');
   if (saved) { const f = await dbxFilesIn(saved).catch(() => null); if (f) return f; }
   const { matches } = await (await dfetch('files/search_v2', { query: 'tracker_file', options: { filename_only: true, file_status: 'active' } })).json();
-  for (const m of matches.map(m => m.metadata.metadata).filter(f => f.name === 'tracker_file').slice(0, 5)) {
+  for (const m of matches.map(m => m.metadata.metadata).filter(f => f.name === 'tracker_file' && !f.path_lower.startsWith(MIDINERO_DIR.toLowerCase() + '/')).slice(0, 5)) {
     const folder = m.path_display.slice(0, m.path_display.lastIndexOf('/')), f = await dbxFilesIn(folder);
     if (f) { store.set('bcw-dbx-folder', folder); return f; }
   }
   return null;
 }
 
-async function dbxOpen() {
+async function dbxOpen(app = dbxApp()) {
   if (dirty && !confirmDiscard()) return;
+  store.set('bcw-dbx-app', app);
   try {
     await dbxToken('open');
-    notice('Looking for your Bluecoins data in Dropbox…');
-    const files = await dbxFind();
-    if (!files) throw new Error('No Bluecoins sync files in Dropbox. In Bluecoins, switch sync to Dropbox and sync once, then try again (a folder with tracker_file and a .fydb file is needed).');
+    notice(`Looking for your ${appName(app)} data in Dropbox…`);
+    const files = await dbxFind(app);
+    if (!files) throw new Error(app === 'midinero'
+      ? `No MiDinero files in Dropbox. MiDinero has to sync once first (it puts bluecoins.fydb and tracker_file in Dropbox › ${MIDINERO_DIR.slice(1)}).`
+      : 'No Bluecoins sync files in Dropbox. In Bluecoins, switch sync to Dropbox and sync once, then try again (a folder with tracker_file and a .fydb file is needed).');
     const bytes = new Uint8Array(await (await dfetch('files/download', { path: 'rev:' + files.db.rev })).arrayBuffer());
     drive = files;
-    if (await open(bytes, `${files.db.name} (Dropbox)`, 'dropbox')) notice(`Opened ${files.db.name} from Dropbox, last changed ${new Date(files.db.modifiedTime).toLocaleString()}.`);
+    if (await open(bytes, `${files.db.name} (Dropbox)`, 'dropbox')) notice(`Opened ${appName(app)}'s ${files.db.name} from Dropbox, last changed ${new Date(files.db.modifiedTime).toLocaleString()}.`);
   } catch (e) { notice(e.message, true); }
 }
 
@@ -944,9 +958,9 @@ async function dbxUpload() {
   try {
     await dbxToken('upload');
     notice('Checking Dropbox…');
-    const now = await dbxFind();
+    const now = await dbxFind(drive.dbx);
     if (!now || now.db.path !== drive.db.path || now.db.rev !== drive.db.rev)
-      throw new Error('Bluecoins changed the data in Dropbox after you opened it, so nothing was uploaded. Choose Reload from Dropbox and make your edits again.');
+      throw new Error(`${appName(drive.dbx)} changed the data in Dropbox after you opened it, so nothing was uploaded. Choose Reload from Dropbox and make your edits again.`);
     drive.tracker = now.tracker;
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
     await dfetch('files/copy_v2', { from_path: drive.db.path, to_path: `/Bluecoins Web backups/bluecoins-web-backup-${stamp}.fydb`, autorename: true });
@@ -958,7 +972,7 @@ async function dbxUpload() {
     updateMeta();
     await dfetch('files/upload', { path: drive.tracker.path, mode: { '.tag': 'overwrite' } }, trackerText);
     dirty = 0;
-    notice(`Uploaded. The previous version was saved in Dropbox › Bluecoins Web backups as bluecoins-web-backup-${stamp}.fydb. Open Bluecoins and sync to get the changes.`);
+    notice(`Uploaded. The previous version was saved in Dropbox › Bluecoins Web backups as bluecoins-web-backup-${stamp}.fydb. ${drive.dbx === 'midinero' ? 'MiDinero picks up the changes when it next opens.' : 'Open Bluecoins and sync to get the changes.'}`);
   } catch (e) { notice(e.message, true); }
   updateSaveUI();
 }
@@ -997,8 +1011,10 @@ $('#ed-del').addEventListener('click', e => {
 $('#savecopy').addEventListener('click', saveCopy);
 $('#upload').addEventListener('click', () => drive?.dbx ? dbxUpload() : driveUpload());
 $('#drive-open').addEventListener('click', driveOpen);
-$('#dbx-open').addEventListener('click', dbxOpen);
-$('#drive-reload').addEventListener('click', () => drive?.dbx ? dbxOpen() : driveOpen());
+$('#dbx-open').addEventListener('click', () => dbxOpen('bluecoins'));
+$('#dbx-open-md').addEventListener('click', () => dbxOpen('midinero'));
+$('#dbx-switch').addEventListener('click', () => dbxOpen(otherApp()));
+$('#drive-reload').addEventListener('click', () => drive?.dbx ? dbxOpen(drive.dbx === 'midinero' ? 'midinero' : 'bluecoins') : driveOpen());
 $('#drive-repick').addEventListener('click', () => driveOpen(true));
 $('#forget').addEventListener('click', async () => {
   if (dirty && !confirmDiscard()) return;
@@ -1016,7 +1032,7 @@ for (const [ev, on] of [['dragover', true], ['dragleave', false], ['drop', false
   const t = store.get('bcw-tab'); if (t) showTab(t);
   if (/[#&](access_token|error)=/.test(location.hash)) return finishSignIn();
   if (new URLSearchParams(location.search).get('state')?.startsWith('dbx:')) return dbxFinish();
-  if (store.get('bcw-source') === 'dropbox') return dbx?.refresh ? dbxOpen() : notice('Choose Open from Dropbox to load your latest data.');
+  if (store.get('bcw-source') === 'dropbox') return dbx?.refresh ? dbxOpen() : notice(`Choose Open ${appName(dbxApp())} from Dropbox to load your latest data.`);
   if (store.get('bcw-source') === 'drive') {
     if (token && Date.now() < tokenExp - 60000) return driveOpen();
     return getToken('auto');
