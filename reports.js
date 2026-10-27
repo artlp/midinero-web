@@ -1,4 +1,4 @@
-/* Bluecoins Web: Reports tab.
+/* MiDinero Web: Reports tab.
    Loaded before the app script; everything below runs only when renderReports() is called,
    and then uses the app's globals: D, $, esc, money, monthName, hue, showTab, renderTransactions, openEditor.
    All amounts are in the main currency at the rate saved with each transaction (t.amount).

@@ -1,4 +1,4 @@
-/* Bluecoins Web: Tools tab.
+/* MiDinero Web: Tools tab.
    One-time fix for exchange rates distorted by main-currency switches. Bluecoins re-prices the whole history at a single
    rate whenever the main currency changes (here RUB -> ILS around 2022, then ILS -> EUR on 2026-10-02 at 3.4755), so older
    rows carry that one day's rate instead of their own. For income and expenses typed in their account's own currency we

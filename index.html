@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Bluecoins Web</title>
+<title>MiDinero Web</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Unbounded:wght@500;700&display=swap">
@@ -117,7 +117,7 @@ dialog::backdrop { background: rgb(0 0 0 / .4) }
 
 <div class="wrap">
   <header class="top">
-    <div class="brand"><h1>Bluecoins Web</h1><small id="meta" class="muted">Web version of your Bluecoins data</small></div>
+    <div class="brand"><h1>MiDinero Web</h1><small id="meta" class="muted">Web version of your MiDinero and Bluecoins data</small></div>
     <div class="actions">
       <button id="forget" type="button" hidden>Forget file</button>
       <button id="dbx-switch" type="button" hidden></button>
@@ -130,8 +130,8 @@ dialog::backdrop { background: rgb(0 0 0 / .4) }
   <p id="notice" class="notice" hidden></p>
 
   <section id="empty" class="drop">
-    <h2>Open your Bluecoins data</h2>
-    <p class="muted">Bluecoins Web lets you view and edit the finances you keep in the Bluecoins Android app from any browser: account balances, transactions, transfers and monthly reports. It opens the sync files Bluecoins keeps in your Google Drive or Dropbox, and saves your edits back to them so the phone app picks them up. Everything is processed in this browser; there is no server.</p>
+    <h2>Open your finance data</h2>
+    <p class="muted">MiDinero Web lets you view and edit the finances you keep in the MiDinero or Bluecoins Android app from any browser: account balances, transactions, transfers and monthly reports. It opens the sync files those apps keep in your Google Drive or Dropbox, and saves your edits back to them so the phone app picks them up. Everything is processed in this browser; there is no server.</p>
     <p class="muted">With Google Drive, the app only gets access to the two files you pick (<b>bluecoins.fydb</b> and <b>tracker_file</b>), never the rest of your Drive. With Dropbox, it finds the folder holding <b>tracker_file</b> by itself and stays signed in on this browser; data that MiDinero syncs to Dropbox (folder <b>/MiDinero</b>) opens the same way. You can also open a downloaded <b>.fydb</b> file instead.</p>
     <div class="actions">
       <button id="drive-open" class="primary" type="button">Open from Google Drive</button>
@@ -176,7 +176,7 @@ dialog::backdrop { background: rgb(0 0 0 / .4) }
     <p class="foot muted" id="foot"></p>
   </div>
   <footer class="foot muted">
-    <a href="privacy.html">Privacy policy</a> · <a href="https://github.com/artlp/bluecoins-web">Source code</a> ·
+    <a href="privacy.html">Privacy policy</a> · <a href="https://github.com/artlp/midinero-web">Source code</a> ·
     <a href="https://www.exchangerate-api.com">Rates By Exchange Rate API</a> ·
     An independent tool, not made by or affiliated with the developers of Bluecoins.
   </footer>
@@ -1021,7 +1021,7 @@ $('#forget').addEventListener('click', async () => {
   try { await idb('readwrite', s => s.delete('last')); } catch {}
   D?.db.close(); D = null; dirty = 0;
   $('#app').hidden = true; $('#empty').hidden = false; updateSaveUI(); notice('');
-  $('#meta').textContent = 'Web version of your Bluecoins data';
+  $('#meta').textContent = 'Web version of your MiDinero and Bluecoins data';
 });
 window.addEventListener('beforeunload', e => { if (dirty && !leaving) { e.preventDefault(); e.returnValue = ''; } });
 for (const [ev, on] of [['dragover', true], ['dragleave', false], ['drop', false]])
