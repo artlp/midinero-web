@@ -4,115 +4,141 @@
 <title>MiDinero Web</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Unbounded:wght@500;700&display=swap">
-<link rel="stylesheet" href="reports.css?v=5">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="reports.css?v=6">
 <style>
-/* Layout: one column ledger, sticky top bar, three tabs (accounts, transactions, reports), modal editor */
+/* Layout: MiDinero look (rounded cards, one accent); sticky top bar, tabs (bottom bar on phones), modal editor */
 :root {
-  --bg: #f3f6f7; --surface: #ffffff; --ink: #13212a; --muted: #5d6c76; --line: #dbe3e7;
-  --accent: #0a6a85; --accent-soft: #e1eff3; --pos: #1d7648; --neg: #b03636;
-  --tag-s: 55%; --tag-bg: 91%; --tag-fg: 28%;
-  --display: "Unbounded", "Segoe UI", system-ui, sans-serif;
-  --body: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* MiDinero's tokens (budget/lib/ui/miTheme.dart), accent = the blue from the user's phone */
+  --bg: #f5f4fb; --surface: #ffffff; --ink: #1e1b2e; --muted: #5d5872; --line: #f0eef8; --border: #dcd8ec; --track: #eceaf6;
+  --accent: #2b63e0; --accent-soft: #e6edfb; --on-accent: #ffffff; --pos: #1f7a57; --neg: #b8442c;
+  --inc-bar: #2fa37a; --exp-bar: #e0703a;
+  --tag-s: 55%; --tag-bg: 88%; --tag-fg: 26%;
+  --display: "Onest", "Segoe UI", system-ui, sans-serif;
+  --body: "Onest", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius: 24px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0e1519; --surface: #151f25; --ink: #e2eaee; --muted: #8d9ea8; --line: #25333b;
-  --accent: #56b6d1; --accent-soft: #173039; --pos: #62c48f; --neg: #e57b7b; --tag-bg: 22%; --tag-fg: 80%; color-scheme: dark } }
+  --bg: #15131f; --surface: #221f2e; --ink: #edebf7; --muted: #a9a4be; --line: #2e2a3d; --border: #3a3550; --track: #2e2a3d;
+  --accent: #5c8bf3; --accent-soft: #1b274f; --pos: #5cc79e; --neg: #e8806a; --tag-bg: 24%; --tag-fg: 82%; color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #0e1519; --surface: #151f25; --ink: #e2eaee; --muted: #8d9ea8; --line: #25333b;
-  --accent: #56b6d1; --accent-soft: #173039; --pos: #62c48f; --neg: #e57b7b; --tag-bg: 22%; --tag-fg: 80%; color-scheme: dark }
+  --bg: #15131f; --surface: #221f2e; --ink: #edebf7; --muted: #a9a4be; --line: #2e2a3d; --border: #3a3550; --track: #2e2a3d;
+  --accent: #5c8bf3; --accent-soft: #1b274f; --pos: #5cc79e; --neg: #e8806a; --tag-bg: 24%; --tag-fg: 82%; color-scheme: dark }
 
 * { box-sizing: border-box }
 [hidden] { display: none !important }
 body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); margin: 0; padding-inline: 16px; padding-block: 0 48px }
 .wrap { max-width: 1120px; margin: 0 auto }
-h1, h2 { font-family: var(--display); font-weight: 500; text-wrap: balance; margin: 0 }
-h1 { font-size: 1.05rem; letter-spacing: .01em }
-h2 { font-size: .95rem }
+h1, h2 { font-family: var(--display); font-weight: 700; text-wrap: balance; margin: 0 }
+h1 { font-size: 1.4rem }
+h2 { font-size: 1.1rem }
 .muted { color: var(--muted) }
 a { color: var(--accent) }
 .num { font-variant-numeric: tabular-nums; white-space: nowrap }
 .pos { color: var(--pos) } .neg { color: var(--neg) }
 button, .btn, select, input, textarea { font: inherit; color: inherit }
-.btn, button { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer }
-.btn.primary, button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface) }
+.btn, button { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; cursor: pointer }
+.btn.primary, button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700 }
 button:disabled { opacity: .5; cursor: default }
 button.danger { color: var(--neg) }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
-select, input, textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 0 }
+select, input, textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 9px 14px; min-width: 0 }
 
-.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; background: var(--bg); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 14px; border-bottom: 1px solid var(--line) }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; background: var(--bg); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 18px 12px }
 .brand { display: flex; flex-direction: column; flex: 1 1 200px; min-width: 0 }
 .brand small { font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .actions { display: flex; flex-wrap: wrap; gap: 8px }
-.notice { margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--accent-soft) }
+.notice { margin: 12px 0 0; padding: 12px 18px; border-radius: 18px; background: var(--accent-soft) }
 .notice.err { color: var(--neg) }
 
-.drop { margin-top: 32px; border: 2px dashed var(--line); border-radius: 14px; padding: 32px 24px; display: grid; gap: 14px; justify-items: center; text-align: center }
+.drop { margin-top: 24px; background: var(--surface); border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px 24px; display: grid; gap: 14px; justify-items: center; text-align: center }
 .drop.over { border-color: var(--accent); background: var(--accent-soft) }
 .drop p { max-width: 56ch; margin: 0 }
 .err { color: var(--neg) }
 
-.tabs { display: flex; gap: 4px; margin-block: 16px; border-bottom: 1px solid var(--line) }
-.tabs button { border: 0; border-radius: 0; background: none; padding: 8px 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px }
-.tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600 }
+/* Tabs: a pill switcher on wide screens, MiDinero's bottom bar on phones */
+.tabs { display: flex; gap: 4px; width: fit-content; max-width: 100%; margin-block: 8px 16px; padding: 4px; background: var(--surface); border-radius: 999px }
+.tabs button { border: 0; background: none; padding: 8px 18px; color: var(--muted) }
+.tabs button[aria-selected=true] { background: var(--accent-soft); color: var(--accent); font-weight: 700 }
+@media (max-width: 720px) {
+  body { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) }
+  .tabs { position: fixed; z-index: 3; inset: auto 0 0; width: auto; margin: 0; border-radius: 0; border-top: 1px solid var(--line);
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)); justify-content: space-around }
+  .tabs button { flex: 1; padding: 10px 4px; font-size: .9rem }
+}
 
-.net { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 24px; margin-bottom: 20px }
-.net .big { font-family: var(--display); font-size: clamp(1.6rem, 5vw, 2.2rem); font-weight: 500 }
-.label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }
-.group { margin-bottom: 24px }
-.group-head { display: flex; justify-content: space-between; gap: 12px; padding-block: 6px; border-bottom: 2px solid var(--ink) }
-.type-head { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding-top: 12px }
-.acct, .tx { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; cursor: pointer }
-.acct { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 16px; align-items: baseline; padding: 8px 4px }
-.acct:hover, .tx:hover { background: var(--accent-soft) }
+#net { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 32px; margin-bottom: 14px; padding: 24px 28px; border-radius: var(--radius); background: var(--accent); color: var(--on-accent) }
+#net > div:first-child { flex: 1 0 100% }
+#net .big { font-family: var(--display); font-size: clamp(2rem, 7vw, 3rem); font-weight: 700; line-height: 1.15 }
+#net :is(.pos, .neg) { color: inherit }
+#net .label { color: inherit; opacity: .85 }
+.label { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted) }
+.group { margin-bottom: 14px; padding: 18px 20px; background: var(--surface); border-radius: var(--radius) }
+.group-head { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 4px; font-weight: 700 }
+.type-head { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 14px 8px 4px }
+.acct, .tx { width: 100%; background: none; border: 0; border-radius: 16px; text-align: left; cursor: pointer }
+.acct { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 16px; align-items: baseline; padding: 10px 8px }
+.acct + .acct, .tx + .tx { border-top: 1px solid var(--line); border-radius: 0 }
+.acct:hover, .tx:hover { background: var(--accent-soft); border-radius: 16px }
 .acct .conv { font-size: .85rem; min-width: 7ch; text-align: right }
 .toggle { display: inline-flex; gap: 6px; align-items: center; font-size: .9rem; color: var(--muted) }
 
 .filters { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: 8px; margin-bottom: 12px }
+.filters input[type=search] { border: 0; border-radius: 999px; padding: 12px 20px }
 @media (max-width: 720px) { .filters { grid-template-columns: 1fr 1fr } .filters input[type=search] { grid-column: 1 / -1 } }
-.filter-chip { padding: 1px 10px; border-radius: 999px; border: 0; background: var(--accent); color: var(--surface); font-size: .85rem; margin-right: 6px }
-.listbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; font-size: .9rem }
-.day { font-size: .8rem; color: var(--muted); padding: 14px 4px 4px; border-bottom: 1px solid var(--line) }
-.tx { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 4px }
+.filter-chip { padding: 4px 12px; border-radius: 999px; border: 0; background: var(--accent); color: var(--on-accent); font-size: .85rem; margin-right: 6px }
+.listbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; font-size: .9rem }
+@media (max-width: 720px) {
+  #add { position: fixed; z-index: 3; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); padding: 16px 22px; border-radius: 20px; box-shadow: 0 6px 20px rgb(0 0 0 / .25) }
+}
+#add::before { content: "+ " }
+.day { display: flex; justify-content: space-between; gap: 12px; font-size: .85rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); padding: 18px 14px 8px }
+.day .num { font-weight: 400; text-transform: none }
+.card { background: var(--surface); border-radius: var(--radius); padding: 4px }
+.tx { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 14px }
 .tx.void { opacity: .55 }
-.tx-main { display: grid; gap: 4px; min-width: 0 }
-.tx .item { font-weight: 600; overflow-wrap: anywhere }
-.tx .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: .85rem; color: var(--muted); min-width: 0 }
-.tx .meta .cat { color: var(--ink) }
-.tx .kind { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px }
-.tags { display: flex; flex-wrap: wrap; gap: 4px }
-.tag { font-size: .75rem; line-height: 1.5; padding: 0 8px; border-radius: 999px; background: hsl(var(--h) var(--tag-s) var(--tag-bg)); color: hsl(var(--h) var(--tag-s) var(--tag-fg)) }
-.tx .note { font-size: .85rem; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere }
-.tx-amt { display: grid; justify-items: end; gap: 4px; text-align: right }
-.tx .amt { font-size: 1.05rem; font-weight: 600 }
+.ico { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 1.05rem;
+  background: hsl(var(--h) var(--tag-s) var(--tag-bg)); color: hsl(var(--h) var(--tag-s) var(--tag-fg)) }
+.tx-main { display: grid; gap: 3px; min-width: 0 }
+.tx .item { font-size: 1.05rem; font-weight: 500; overflow-wrap: anywhere }
+.tx .time { font-size: .85rem; font-weight: 400; color: var(--muted) }
+.tx .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: .9rem; color: var(--muted); min-width: 0 }
+.tx .kind { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--border); border-radius: 6px; padding: 0 6px }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px }
+.tag { font-size: .78rem; font-weight: 700; line-height: 1.6; padding: 0 10px; border-radius: 10px; background: hsl(var(--h) var(--tag-s) var(--tag-bg)); color: hsl(var(--h) var(--tag-s) var(--tag-fg)) }
+.tx .note { font-size: .9rem; font-style: italic; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere }
+.tx-amt { display: grid; justify-items: end; gap: 2px; text-align: right }
+.tx .amt { font-size: 1.1rem; font-weight: 700 }
+.tx .amt.neg { color: var(--ink) } /* MiDinero shows expenses in plain text, income in green */
 .fx { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted) }
-.code { font-size: .66rem; font-weight: 600; letter-spacing: .06em; line-height: 1; padding: 3px 5px; border-radius: 4px; background: var(--accent-soft); color: var(--accent) }
+.code { font-size: .66rem; font-weight: 700; letter-spacing: .06em; line-height: 1; padding: 3px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent) }
 .more { margin: 16px auto; display: block }
 
 .foot { margin-top: 32px; font-size: .8rem }
 
-dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); padding: 0; width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px) }
-dialog::backdrop { background: rgb(0 0 0 / .4) }
-.ed { display: grid; gap: 12px; padding: 20px }
+dialog { border: 0; border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 0; width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px) }
+dialog::backdrop { background: rgb(0 0 0 / .5) }
+.ed { display: grid; gap: 14px; padding: 24px }
+.ed h2 { font-size: 1.3rem }
 .ed label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); min-width: 0 }
-.ed label > :is(input, select, textarea) { color: var(--ink); font-size: 15px; width: 100% }
+.ed label > :is(input, select, textarea) { color: var(--ink); font-size: 15px; width: 100%; background: var(--bg); border-color: transparent }
 .ed .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
 @media (max-width: 480px) { .ed .two { grid-template-columns: 1fr } }
-.seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
-.seg label { flex: 1; display: block; position: relative; text-align: center; padding: 6px; cursor: pointer; color: var(--ink); font-size: .9rem }
+.seg { display: flex; gap: 4px; padding: 4px; background: var(--bg); border-radius: 999px }
+.seg label { flex: 1; display: block; position: relative; text-align: center; padding: 8px; border-radius: 999px; cursor: pointer; color: var(--ink); font-size: .9rem }
 .seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer }
-.seg label:has(input:checked) { background: var(--accent); color: var(--surface) }
+.seg label:has(input:checked) { background: var(--accent); color: var(--on-accent); font-weight: 700 }
 .seg label:has(input:disabled) { opacity: .4; cursor: default }
-.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px }
-.label-picks { display: flex; flex-wrap: wrap; gap: 4px }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px }
+.label-picks { display: flex; flex-wrap: wrap; gap: 6px }
 .ed label.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: .9rem; cursor: pointer }
 .ed label.check > input { width: auto; margin: 0; accent-color: var(--accent) }
-.label-picks button { padding: 1px 9px; font-size: .78rem; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted) }
-.label-picks button[aria-pressed=true] { border-color: transparent; background: hsl(var(--h) var(--tag-s) var(--tag-bg)); color: hsl(var(--h) var(--tag-s) var(--tag-fg)); font-weight: 600 }
+.label-picks button { padding: 2px 10px; font-size: .78rem; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--muted) }
+.label-picks button[aria-pressed=true] { border-color: transparent; background: hsl(var(--h) var(--tag-s) var(--tag-bg)); color: hsl(var(--h) var(--tag-s) var(--tag-fg)); font-weight: 700 }
 .label-picks button[aria-pressed=true]::after { content: " ×"; font-weight: 400 }
 .ed-actions { display: flex; gap: 8px; align-items: center }
 .ed-actions .grow { flex: 1 }
+.ed-actions button.primary { padding: 10px 28px; border-radius: 20px }
 </style>
 
 <div class="wrap">
@@ -411,15 +437,16 @@ function renderTransactions() {
   const sum = list.filter(t => (acc || t.type !== 5) && !t.void).reduce((s, t) => s + t.amount, 0);
   $('#summary').innerHTML = (catFilter ? `<button type="button" class="filter-chip" id="cat-clear" title="Remove this filter">${catFilterLabel(catFilter)} ×</button> ` : '')
     + `${list.length.toLocaleString()} transactions · net <span class="num ${cls(sum)}">${money(sum, D.base)}</span>`;
-  let day = '', html = '';
-  for (const t of list.slice(0, shown)) {
-    const d = t.date.slice(0, 10);
-    if (d !== day) { day = d; html += `<div class="day">${new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</div>`; }
-    const a = D.acc[t.acc], other = D.acc[t.pair];
+  const days = {};
+  for (const t of list.slice(0, shown)) (days[t.date.slice(0, 10)] ||= []).push(t);
+  const row = t => {
+    const a = D.acc[t.acc], other = D.acc[t.pair], time = t.date.slice(11, 16);
     const where = t.type === 5 ? (t.ref === 1 ? `${esc(a.name)} → ${esc(other?.name)}` : `${esc(other?.name)} → ${esc(a.name)}`) : esc(a.name);
-    html += `<button type="button" class="tx${t.void ? ' void' : ''}" data-id="${t.id}">
+    const icon = t.type === 5 ? '⇄' : esc([...(t.catName || '?')][0].toUpperCase());
+    return `<button type="button" class="tx${t.void ? ' void' : ''}" data-id="${t.id}">
+      <span class="ico" aria-hidden="true" style="--h:${hue(t.type === 5 ? 'transfer' : t.parent || t.catName || '')}">${icon}</span>
       <span class="tx-main">
-        <span class="item">${esc(t.item || t.catName || '—')}</span>
+        <span class="item">${esc(t.item || t.catName || '—')}${time ? ` <span class="time">· ${time}</span>` : ''}</span>
         <span class="meta">${t.type === 5 ? '<span class="kind">Transfer</span>' : t.catName ? `<span class="cat">${esc(t.catName)}</span>` : ''}<span>${where}</span>${t.void ? '<span class="kind">Not counted</span>' : ''}</span>
         ${t.labels.length ? `<span class="tags">${t.labels.map(l => `<span class="tag" style="--h:${hue(l)}">${esc(l)}</span>`).join('')}</span>` : ''}
         ${t.notes ? `<span class="note">${esc(t.notes)}</span>` : ''}
@@ -429,8 +456,13 @@ function renderTransactions() {
         ${t.tc !== D.base ? `<span class="fx"><span class="code">${esc(t.tc)}</span><span class="num">${money(t.amount, D.base)}</span></span>` : ''}
       </span>
     </button>`;
-  }
-  $('#list').innerHTML = html || '<p class="muted">No transactions match these filters.</p>';
+  };
+  const html = Object.entries(days).map(([d, ts]) => {
+    const total = ts.filter(t => (acc || t.type !== 5) && !t.void).reduce((s, t) => s + t.amount, 0);
+    return `<div class="day"><span>${new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</span>`
+      + `<span class="num">${money(total, D.base)}</span></div><div class="card">${ts.map(row).join('')}</div>`;
+  }).join('');
+  $('#list').innerHTML = html ||'<p class="muted">No transactions match these filters.</p>';
   $('#more').hidden = list.length <= shown;
 }
 
