@@ -172,6 +172,7 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
     <nav class="tabs" role="tablist">
       <button type="button" role="tab" data-tab="accounts" aria-selected="true">Accounts</button>
       <button type="button" role="tab" data-tab="transactions" aria-selected="false">Transactions</button>
+      <button type="button" role="tab" data-tab="upcoming" aria-selected="false">Upcoming</button>
       <button type="button" role="tab" data-tab="reports" aria-selected="false">Reports</button>
       <button type="button" role="tab" data-tab="tools" aria-selected="false">Tools</button>
     </nav>
@@ -197,6 +198,11 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
       <button id="more" class="more" type="button" hidden>Show more</button>
     </section>
 
+    <section id="tab-upcoming" hidden>
+      <div class="listbar"><span id="up-summary" class="muted"></span><button id="up-add" class="primary" type="button">Add reminder</button></div>
+      <div id="up-list"></div>
+    </section>
+
     <section id="tab-reports" hidden><div id="reports"></div></section>
     <section id="tab-tools" hidden><div id="tools"></div></section>
     <p class="foot muted" id="foot"></p>
@@ -220,6 +226,13 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
       <label>Amount <span id="ed-cur"></span><input id="ed-amount" inputmode="decimal" autocomplete="off" required></label>
       <label>Date<input id="ed-date" type="datetime-local" step="1" required></label>
     </div>
+    <div class="two" id="ed-rep-wrap">
+      <label>Repeat<select id="ed-freq">
+        <option value="0">Once</option><option value="1">Daily</option><option value="3">Weekly</option><option value="7">Every 2 weeks</option>
+        <option value="4">Monthly</option><option value="5">Quarterly</option><option value="6">Yearly</option></select></label>
+      <label>Every<input id="ed-every" type="number" min="1" step="1" value="1"></label>
+      <label>Ends (optional)<input id="ed-end" type="date"></label>
+    </div>
     <div class="two">
       <label><span id="ed-acc-label">Account</span><select id="ed-acc"></select></label>
       <label id="ed-to-wrap">To account<select id="ed-to"></select></label>
@@ -231,10 +244,11 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
     <label>Labels<input id="ed-labels" autocomplete="off" placeholder="Comma separated"></label>
     <div class="label-picks" id="ed-label-picks"></div>
     <label>Notes<textarea id="ed-notes" rows="2"></textarea></label>
-    <label class="check"><input type="checkbox" id="ed-void"> Don't count in balances and reports (void)</label>
+    <label class="check" id="ed-void-wrap"><input type="checkbox" id="ed-void"> Don't count in balances and reports (void)</label>
     <p id="ed-err" class="err" hidden></p>
     <div class="ed-actions">
       <button id="ed-del" class="danger" type="button">Delete</button>
+      <button id="ed-log" type="button" title="Add the next occurrence as a transaction now">Log now</button>
       <span class="grow"></span>
       <button id="ed-cancel" type="button">Cancel</button>
       <button class="primary" type="submit">Save</button>
@@ -333,6 +347,18 @@ function derive() {
     if (a && !t.void) a.bal += t.tc === a.cur ? t.native : t.amount * a.rate;
   }
   D.list = D.all.filter(t => t.type >= 3 && t.type <= 5 && D.acc[t.acc]);
+  // Reminders: one row per upcoming occurrence, grouped by reminderGroupID; the group's earliest live row stands for it
+  D.groups = {};
+  for (const t of rows(`select t.transactionsTableID id, t.amount / 1000000.0 amount, t.transactionCurrency tc, t.conversionRateNew rate, t.date,
+    t.transactionTypeID type, t.categoryID cat, t.accountID acc, t.notes, t.status, i.itemName item, t.reminderGroupID gid,
+    t.reminderFrequency freq, t.reminderRepeatEvery every, t.reminderEndingType endType, t.reminderEndDate endDate
+    from TRANSACTIONSTABLE t left join ITEMTABLE i on i.itemTableID = t.itemID
+    where t.deletedTransaction <> 5 and t.reminderTransaction = 9 order by t.date, t.transactionsTableID`)) {
+    if (D.groups[t.gid] || !D.acc[t.acc]) continue;
+    t.rate = t.rate || 1; t.native = t.amount * t.rate; t.labels = labels[t.id] || [];
+    const c = cats[t.cat]; t.catName = c ? (c.parent && c.parent !== c.name ? c.parent + ' › ' + c.name : c.name) : '';
+    D.groups[t.gid] = t;
+  }
   for (const t of D.list) {
     const c = cats[t.cat];
     t.labels = labels[t.id] || [];
@@ -466,6 +492,82 @@ function renderTransactions() {
   $('#more').hidden = list.length <= shown;
 }
 
+// ---------- upcoming (Bluecoins reminders) ----------
+const FREQ = { 0: 'Once', 1: 'Daily', 2: 'Daily', 3: 'Weekly', 7: 'Every 2 weeks', 4: 'Monthly', 5: 'Quarterly', 6: 'Yearly' };
+const dayText = d => new Date(d.slice(0, 10) + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const repeatText = t => (t.every > 1 && t.freq ? `Every ${t.every} × ` : '') + (FREQ[t.freq] ?? 'Repeats')
+  + (t.endType === 3 && t.endDate ? ` until ${dayText(t.endDate)}` : '');
+function renderUpcoming() {
+  const gs = Object.values(D.groups).sort((a, b) => a.date.localeCompare(b.date));
+  $('#up-summary').textContent = `${gs.length} reminders · not counted in balances or reports`;
+  $('#up-list').innerHTML = gs.length ? '<div class="card">' + gs.map(t => `<button type="button" class="tx" data-gid="${t.gid}">
+      <span class="ico" aria-hidden="true" style="--h:${hue(t.catName || '')}">${esc([...(t.catName || '?')][0].toUpperCase())}</span>
+      <span class="tx-main">
+        <span class="item">${esc(t.item || t.catName || '—')} <span class="time">· ${dayText(t.date)}</span></span>
+        <span class="meta"><span class="kind">${esc(repeatText(t))}</span>${t.catName ? `<span class="cat">${esc(t.catName)}</span>` : ''}<span>${esc(D.acc[t.acc].name)}</span></span>
+        ${t.labels.length ? `<span class="tags">${t.labels.map(l => `<span class="tag" style="--h:${hue(l)}">${esc(l)}</span>`).join('')}</span>` : ''}
+        ${t.notes ? `<span class="note">${esc(t.notes)}</span>` : ''}
+      </span>
+      <span class="tx-amt"><span class="num amt ${cls(t.native)}">${money(t.native, t.tc)}</span></span>
+    </button>`).join('') + '</div>' : '<p class="muted">No reminders.</p>';
+}
+
+// Dates of a reminder's occurrences, stored like Bluecoins: one row each, 100 when it never ends.
+// Months keep the first date's day, or the month's last day when shorter.
+function occurrences(start, freq, every, end, n = 100) {
+  const d0 = new Date(start.replace(' ', 'T')), out = [];
+  const months = { 4: 1, 5: 3, 6: 12 }[freq], days = { 1: 1, 2: 1, 3: 7, 7: 14 }[freq] || 0;
+  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  for (let k = 0; k < (freq ? n : 1); k++) {
+    const y = d0.getFullYear(), m = d0.getMonth() + (months ? k * every * months : 0);
+    const day = months ? Math.min(d0.getDate(), new Date(y, m + 1, 0).getDate()) : d0.getDate() + k * every * days;
+    const s = fmt(new Date(y, m, day, d0.getHours(), d0.getMinutes(), d0.getSeconds()));
+    if (end && s.slice(0, 10) > end) break;
+    out.push(s);
+  }
+  return out;
+}
+
+// Edit or add: the group's remaining rows are replaced by a fresh run from the next date. Their ids are reused
+// (MiDinero matches its schedule by the group's first id) and so are the group's other Bluecoins settings.
+function saveReminder(r, labels) {
+  const gid = editing.F?.gid ?? newId();
+  const old = rows(`select transactionsTableID id, reminderEndingType endType, reminderAutomaticLogTransaction auto, reminderRepeatByDayOfMonth byDay,
+    reminderExcludeWeekend noWeekend, reminderWeekDayMoveSetting move from TRANSACTIONSTABLE
+    where reminderGroupID = ? and reminderTransaction = 9 and deletedTransaction <> 5 order by transactionsTableID`, [gid]);
+  const freq = +$('#ed-freq').value, every = Math.max(1, Math.round(+$('#ed-every').value) || 1), end = freq ? $('#ed-end').value : '';
+  const afterN = !end && !!freq && old[0]?.endType === 2; // "ends after N": keep the number of occurrences left
+  const dates = occurrences(r.date, freq, every, end, afterN ? old.length : 100);
+  const ids = old.map(o => o.id).concat(dates.slice(old.length).map(() => newId()));
+  if (old.length) {
+    const list = old.map(o => Number(o.id)).join(',');
+    D.db.run(`delete from LABELSTABLE where transactionIDLabels in (${list})`);
+    D.db.run(`delete from TRANSACTIONSTABLE where transactionsTableID in (${list})`);
+  }
+  const o = old[0] || { auto: 2, byDay: 1, noWeekend: 0, move: 0 };
+  dates.forEach((date, k) => {
+    insertTx({ ...r, date, id: ids[k], ref: 1, uid: ids[k], status: 0 });
+    D.db.run(`update TRANSACTIONSTABLE set reminderTransaction = 9, reminderGroupID = ?, reminderFrequency = ?, reminderRepeatEvery = ?, reminderEndingType = ?,
+      reminderStartDate = ?, reminderEndDate = ?, reminderAfterNoOfOccurences = ?, reminderAutomaticLogTransaction = ?, reminderRepeatByDayOfMonth = ?,
+      reminderExcludeWeekend = ?, reminderWeekDayMoveSetting = ? where transactionsTableID = ?`,
+      [gid, freq, freq ? every : 1, !freq || afterN ? 2 : end ? 3 : 1, dates[0], end ? end + ' 00:00:00' : dates[0], afterN ? dates.length : 1,
+        o.auto, o.byDay, o.noWeekend, o.move, ids[k]]);
+  });
+  setLabels(ids.slice(0, dates.length), labels);
+}
+
+// Log now: the next occurrence becomes a normal transaction (a new row) and leaves the reminder
+function logReminder() {
+  const n = editing.F, id = newId();
+  D.db.run(`insert into TRANSACTIONSTABLE (transactionsTableID, itemID, amount, transactionCurrency, conversionRateNew, date, transactionTypeID,
+    categoryID, accountID, notes, status, accountReference, accountPairID, uidPairID, deletedTransaction, newSplitTransactionID, transferGroupID, creditCardInstallment)
+    select ?, itemID, amount, transactionCurrency, conversionRateNew, date, transactionTypeID, categoryID, accountID, notes, 0, 1, accountID, ?, 6, null, null, 0
+    from TRANSACTIONSTABLE where transactionsTableID = ?`, [id, id, n.id]);
+  setLabels([id], n.labels);
+  D.db.run("update TRANSACTIONSTABLE set deletedTransaction = 5 where transactionsTableID = ?", [n.id]);
+  afterChange('Reminder logged as a transaction.');
+}
+
 function updateMeta() {
   const when = d => new Date(d).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   $('#meta').textContent = drive
@@ -488,12 +590,12 @@ function renderAll() {
     [...new Set(D.list.map(t => t.date.slice(0, 7)))].map(m => `<option value="${m}">${monthName(m)}</option>`).join('');
   $('#f-month').value = keepMonth;
   $('#items').innerHTML = D.items.map(n => `<option value="${esc(n)}">`).join('');
-  renderAccounts(); renderTransactions(); renderReports(); renderTools(); updateSaveUI();
+  renderAccounts(); renderTransactions(); renderUpcoming(); renderReports(); renderTools(); updateSaveUI();
 }
 
 function showTab(name) {
   for (const b of document.querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', b.dataset.tab === name);
-  for (const s of ['accounts', 'transactions', 'reports', 'tools']) $('#tab-' + s).hidden = s !== name;
+  for (const s of ['accounts', 'transactions', 'upcoming', 'reports', 'tools']) $('#tab-' + s).hidden = s !== name;
   store.set('bcw-tab', name);
 }
 
@@ -547,15 +649,19 @@ function pairOf(t) {
   return t.ref === 1 ? { F: t, T: o } : { F: o || t, T: o ? t : undefined };
 }
 
-function openEditor(t) {
-  editing = pairOf(t);
+function openEditor(t, rem = false) {
+  editing = rem ? { F: t, rem } : pairOf(t);
   const F = editing?.F, T = editing?.T;
-  $('#ed-title').textContent = t ? 'Edit transaction' : 'Add transaction';
+  $('#ed-title').textContent = (t ? 'Edit ' : 'Add ') + (rem ? 'reminder' : 'transaction');
+  $('#ed-rep-wrap').hidden = !rem; $('#ed-void-wrap').hidden = rem; $('#ed-log').hidden = !(rem && t);
+  $('#ed-freq').value = F?.freq ?? 4; $('#ed-every').value = F?.every || 1;
+  $('#ed-end').value = F?.endType === 3 && F.endDate ? F.endDate.slice(0, 10) : '';
   $('#ed-err').hidden = true;
   const del = $('#ed-del'); del.hidden = !t; del.textContent = 'Delete'; delete del.dataset.armed;
   for (const r of document.querySelectorAll('input[name=ed-type]')) {
     r.checked = +r.value === (F?.type || 3);
-    r.disabled = !!t && (F.type === 5) !== (+r.value === 5); // switching to or from a transfer would change how many rows exist
+    // switching to or from a transfer would change how many rows exist; reminders are never transfers here
+    r.disabled = rem ? +r.value === 5 : !!t && (F.type === 5) !== (+r.value === 5);
   }
   const opts = keepId => D.accounts.filter(a => !a.hidden || a.id === keepId).map(a => `<option value="${a.id}">${esc(a.name)} (${a.cur})</option>`).join('');
   const defAcc = F?.acc ?? (+$('#f-acc').value || D.list[0]?.acc || D.accounts[0].id);
@@ -637,6 +743,7 @@ function saveEditor() {
     }
     const sign = F && F.type === type ? (Math.sign(F.amount) || -1) : (type === 3 ? -1 : 1); // keeps refunds positive when edited
     const r = { item, amount: Math.round(sign * amt / rate * 1e6), tc, rate, date, type, cat: +$('#ed-cat').value, acc: accId, notes, pair: accId, status };
+    if (editing?.rem) { saveReminder(r, labels); return afterChange(F ? 'Reminder updated.' : 'Reminder added.'); }
     if (F) { updateTx(F.id, r); ids = [F.id]; }
     else { const id = newId(); insertTx({ ...r, id, ref: 1, uid: id }); ids = [id]; }
   } else {
@@ -667,6 +774,10 @@ function saveEditor() {
 }
 
 function deleteEditing() {
+  if (editing.rem) {
+    D.db.run("update TRANSACTIONSTABLE set deletedTransaction = 5 where reminderGroupID = ? and reminderTransaction = 9", [editing.F.gid]);
+    return afterChange('Reminder deleted.');
+  }
   const ids = [editing.F?.id, editing.T?.id].filter(Boolean);
   D.db.run(`update TRANSACTIONSTABLE set deletedTransaction = 5 where transactionsTableID in (${ids.map(Number).join(',')})`);
   afterChange('Transaction deleted.');
@@ -1028,6 +1139,9 @@ $('#summary').addEventListener('click', e => { if (e.target.closest('#cat-clear'
 $('#more').addEventListener('click', () => { shown += 300; renderTransactions(); });
 $('#list').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (b) openEditor(D.byId[b.dataset.id]); });
 $('#add').addEventListener('click', () => openEditor(null));
+$('#up-add').addEventListener('click', () => openEditor(null, true));
+$('#up-list').addEventListener('click', e => { const b = e.target.closest('[data-gid]'); if (b) openEditor(D.groups[b.dataset.gid], true); });
+$('#ed-log').addEventListener('click', logReminder);
 for (const r of document.querySelectorAll('input[name=ed-type]')) r.addEventListener('change', () => { fillCategories(); updateEditorUI(); });
 $('#ed-acc').addEventListener('change', updateEditorUI);
 $('#ed-to').addEventListener('change', updateEditorUI);
