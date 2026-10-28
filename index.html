@@ -99,6 +99,7 @@ select, input, textarea { background: var(--surface); border: 1px solid var(--bo
 .tx.void { opacity: .55 }
 .ico { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 1.05rem;
   background: hsl(var(--h) var(--tag-s) var(--tag-bg)); color: hsl(var(--h) var(--tag-s) var(--tag-fg)) }
+.ico img { width: 24px; height: 24px }
 .tx-main { display: grid; gap: 3px; min-width: 0 }
 .tx .item { font-size: 1.05rem; font-weight: 500; overflow-wrap: anywhere }
 .tx .time { font-size: .85rem; font-weight: 400; color: var(--muted) }
@@ -109,6 +110,7 @@ select, input, textarea { background: var(--surface); border: 1px solid var(--bo
 .tx .note { font-size: .9rem; font-style: italic; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere }
 .tx-amt { display: grid; justify-items: end; gap: 2px; text-align: right }
 .tx .amt { font-size: 1.1rem; font-weight: 700 }
+.tx .acc { font-size: .85rem; color: var(--muted); max-width: 16ch; overflow-wrap: anywhere }
 .tx .amt.neg { color: var(--ink) } /* MiDinero shows expenses in plain text, income in green */
 .fx { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted) }
 .code { font-size: .66rem; font-weight: 700; letter-spacing: .06em; line-height: 1; padding: 3px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent) }
@@ -210,6 +212,7 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
   <footer class="foot muted">
     <a href="privacy.html">Privacy policy</a> · <a href="https://github.com/artlp/midinero-web">Source code</a> ·
     <a href="https://www.exchangerate-api.com">Rates By Exchange Rate API</a> ·
+    Category icons: <a href="https://github.com/jdecked/twemoji">Twemoji</a> by Twitter, Inc. and contributors, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> ·
     An independent tool, not made by or affiliated with the developers of Bluecoins.
   </footer>
 </div>
@@ -263,6 +266,7 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
 <!-- bump ?v= on reports.css/js and tools.js when they change, so browsers don't keep the old copy -->
 <script src="reports.js?v=7"></script>
 <script src="tools.js?v=4"></script>
+<script src="icons.js?v=1"></script>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -323,9 +327,15 @@ function derive() {
   D.accounts = rows(`select accountsTableID id, accountName name, accountTypeID type, accountHidden hidden,
     accountCurrency cur, accountConversionRateNew rate from ACCOUNTSTABLE where accountTypeID <> 0 order by accountName`);
   D.acc = Object.fromEntries(D.accounts.map(a => [a.id, Object.assign(a, { bal: 0, rate: a.rate || 1 })]));
-  D.cats = rows(`select c.categoryTableID id, c.childCategoryName name, p.parentCategoryName parent, p.categoryGroupID grp
+  D.cats = rows(`select c.categoryTableID id, c.childCategoryName name, p.parentCategoryName parent, p.categoryGroupID grp,
+    c.parentCategoryID pid, c.childCategoryIcon icon
     from CHILDCATEGORYTABLE c left join PARENTCATEGORYTABLE p on p.parentCategoryTableID = c.parentCategoryID order by p.parentCategoryName, c.childCategoryName`);
   const cats = Object.fromEntries(D.cats.map(c => [c.id, c]));
+  // Icon as MiDinero picks it on import: an only child shows its parent's icon, otherwise the child's own name decides
+  const kids = {};
+  for (const c of D.cats) kids[c.pid] = (kids[c.pid] || 0) + 1;
+  // shortcut: name matches agree with the phone, the four fallback icons go by category id rather than MiDinero's import order
+  for (const c of D.cats) c.ico = iconFor(kids[c.pid] === 1 && c.parent ? c.parent : c.name, c.id, c.icon);
   D.items = rows("select itemName n from ITEMTABLE where itemAutoFillVisibility = 0 order by itemName").map(r => r.n);
   const labels = {};
   for (const l of rows("select transactionIDLabels id, labelName name from LABELSTABLE where transactionIDLabels is not null")) (labels[l.id] ||= []).push(l.name);
@@ -356,7 +366,7 @@ function derive() {
     where t.deletedTransaction <> 5 and t.reminderTransaction = 9 order by t.date, t.transactionsTableID`)) {
     if (D.groups[t.gid] || !D.acc[t.acc]) continue;
     t.rate = t.rate || 1; t.native = t.amount * t.rate; t.labels = labels[t.id] || [];
-    const c = cats[t.cat]; t.catName = c ? (c.parent && c.parent !== c.name ? c.parent + ' › ' + c.name : c.name) : '';
+    const c = cats[t.cat]; t.catName = c ? (c.parent && c.parent !== c.name ? c.parent + ' › ' + c.name : c.name) : ''; t.ico = c?.ico;
     D.groups[t.gid] = t;
   }
   for (const t of D.list) {
@@ -365,6 +375,7 @@ function derive() {
     t.catName = c ? (c.parent && c.parent !== c.name ? c.parent + ' › ' + c.name : c.name) : '';
     t.parent = c ? c.parent || c.name : 'Other';
     t.child = c ? c.name : 'Other';
+    t.ico = c?.ico;
     t.text = [t.item, t.notes, t.catName, ...t.labels].join(' ').toLowerCase();
   }
 }
@@ -458,6 +469,9 @@ function filtered() {
   });
 }
 
+// Twemoji image for the row's category (icons.js), or the category's first letter when it has none
+const catIcon = t => t.type === 5 ? '⇄' : t.ico ? `<img src="icons/${t.ico}" alt="" loading="lazy">` : esc([...(t.catName || '?')][0].toUpperCase());
+
 function renderTransactions() {
   const list = filtered(), acc = $('#f-acc').value;
   const sum = list.filter(t => (acc || t.type !== 5) && !t.void).reduce((s, t) => s + t.amount, 0);
@@ -468,18 +482,18 @@ function renderTransactions() {
   const row = t => {
     const a = D.acc[t.acc], other = D.acc[t.pair], time = t.date.slice(11, 16);
     const where = t.type === 5 ? (t.ref === 1 ? `${esc(a.name)} → ${esc(other?.name)}` : `${esc(other?.name)} → ${esc(a.name)}`) : esc(a.name);
-    const icon = t.type === 5 ? '⇄' : esc([...(t.catName || '?')][0].toUpperCase());
     return `<button type="button" class="tx${t.void ? ' void' : ''}" data-id="${t.id}">
-      <span class="ico" aria-hidden="true" style="--h:${hue(t.type === 5 ? 'transfer' : t.parent || t.catName || '')}">${icon}</span>
+      <span class="ico" aria-hidden="true" style="--h:${hue(t.type === 5 ? 'transfer' : t.parent || t.catName || '')}">${catIcon(t)}</span>
       <span class="tx-main">
         <span class="item">${esc(t.item || t.catName || '—')}${time ? ` <span class="time">· ${time}</span>` : ''}</span>
-        <span class="meta">${t.type === 5 ? '<span class="kind">Transfer</span>' : t.catName ? `<span class="cat">${esc(t.catName)}</span>` : ''}<span>${where}</span>${t.void ? '<span class="kind">Not counted</span>' : ''}</span>
-        ${t.labels.length ? `<span class="tags">${t.labels.map(l => `<span class="tag" style="--h:${hue(l)}">${esc(l)}</span>`).join('')}</span>` : ''}
+        <span class="meta">${t.type === 5 ? '<span class="kind">Transfer</span>' : t.catName ? `<span class="cat">${esc(t.catName)}</span>` : ''}${t.void ? '<span class="kind">Not counted</span>' : ''}</span>
         ${t.notes ? `<span class="note">${esc(t.notes)}</span>` : ''}
+        ${t.labels.length ? `<span class="tags">${t.labels.map(l => `<span class="tag" style="--h:${hue(l)}">${esc(l)}</span>`).join('')}</span>` : ''}
       </span>
       <span class="tx-amt">
         <span class="num amt ${cls(t.native)}">${money(t.native, t.tc)}</span>
         ${t.tc !== D.base ? `<span class="fx"><span class="code">${esc(t.tc)}</span><span class="num">${money(t.amount, D.base)}</span></span>` : ''}
+        <span class="acc">${where}</span>
       </span>
     </button>`;
   };
@@ -501,7 +515,7 @@ function renderUpcoming() {
   const gs = Object.values(D.groups).sort((a, b) => a.date.localeCompare(b.date));
   $('#up-summary').textContent = `${gs.length} scheduled transactions · not counted in balances or reports`;
   $('#up-list').innerHTML = gs.length ? '<div class="card">' + gs.map(t => `<button type="button" class="tx" data-gid="${t.gid}">
-      <span class="ico" aria-hidden="true" style="--h:${hue(t.catName || '')}">${esc([...(t.catName || '?')][0].toUpperCase())}</span>
+      <span class="ico" aria-hidden="true" style="--h:${hue(t.catName || '')}">${catIcon(t)}</span>
       <span class="tx-main">
         <span class="item">${esc(t.item || t.catName || '—')} <span class="time">· ${dayText(t.date)}</span></span>
         <span class="meta"><span class="kind">${esc(repeatText(t))}</span>${t.catName ? `<span class="cat">${esc(t.catName)}</span>` : ''}<span>${esc(D.acc[t.acc].name)}</span></span>

@@ -8,3 +8,6 @@
 !tools.js
 !fx-rates.json
 !check_fydb.py
+!icons.js
+!icons/
+!icons/**
