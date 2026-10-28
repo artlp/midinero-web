@@ -199,7 +199,7 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
     </section>
 
     <section id="tab-upcoming" hidden>
-      <div class="listbar"><span id="up-summary" class="muted"></span><button id="up-add" class="primary" type="button">Add reminder</button></div>
+      <div class="listbar"><span id="up-summary" class="muted"></span><button id="up-add" class="primary" type="button">Add scheduled transaction</button></div>
       <div id="up-list"></div>
     </section>
 
@@ -248,7 +248,7 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
     <p id="ed-err" class="err" hidden></p>
     <div class="ed-actions">
       <button id="ed-del" class="danger" type="button">Delete</button>
-      <button id="ed-log" type="button" title="Add the next occurrence as a transaction now">Log now</button>
+      <button id="ed-log" type="button" title="Record the next payment as a transaction now">Pay now</button>
       <span class="grow"></span>
       <button id="ed-cancel" type="button">Cancel</button>
       <button class="primary" type="submit">Save</button>
@@ -499,7 +499,7 @@ const repeatText = t => (t.every > 1 && t.freq ? `Every ${t.every} × ` : '') + 
   + (t.endType === 3 && t.endDate ? ` until ${dayText(t.endDate)}` : '');
 function renderUpcoming() {
   const gs = Object.values(D.groups).sort((a, b) => a.date.localeCompare(b.date));
-  $('#up-summary').textContent = `${gs.length} reminders · not counted in balances or reports`;
+  $('#up-summary').textContent = `${gs.length} scheduled transactions · not counted in balances or reports`;
   $('#up-list').innerHTML = gs.length ? '<div class="card">' + gs.map(t => `<button type="button" class="tx" data-gid="${t.gid}">
       <span class="ico" aria-hidden="true" style="--h:${hue(t.catName || '')}">${esc([...(t.catName || '?')][0].toUpperCase())}</span>
       <span class="tx-main">
@@ -509,7 +509,7 @@ function renderUpcoming() {
         ${t.notes ? `<span class="note">${esc(t.notes)}</span>` : ''}
       </span>
       <span class="tx-amt"><span class="num amt ${cls(t.native)}">${money(t.native, t.tc)}</span></span>
-    </button>`).join('') + '</div>' : '<p class="muted">No reminders.</p>';
+    </button>`).join('') + '</div>' : '<p class="muted">No scheduled transactions.</p>';
 }
 
 // Dates of a reminder's occurrences, stored like Bluecoins: one row each, 100 when it never ends.
@@ -565,7 +565,7 @@ function logReminder() {
     from TRANSACTIONSTABLE where transactionsTableID = ?`, [id, id, n.id]);
   setLabels([id], n.labels);
   D.db.run("update TRANSACTIONSTABLE set deletedTransaction = 5 where transactionsTableID = ?", [n.id]);
-  afterChange('Reminder logged as a transaction.');
+  afterChange('Paid: added as a transaction.');
 }
 
 function updateMeta() {
@@ -579,7 +579,7 @@ function renderAll() {
   updateMeta();
   const rates = [...new Set(D.accounts.filter(a => a.cur !== D.base).map(a => a.cur))]
     .map(c => `${c} ${D.accounts.find(a => a.cur === c).rate.toFixed(2)}`).join(', ');
-  $('#foot').textContent = `Account totals in ${D.base} use the rates saved in Bluecoins (1 ${D.base} = ${rates}). Reports use the rate saved with each transaction. Scheduled reminders and deleted transactions are left out.`;
+  $('#foot').textContent = `Account totals in ${D.base} use the rates saved in Bluecoins (1 ${D.base} = ${rates}). Reports use the rate saved with each transaction. Scheduled transactions and deleted transactions are left out.`;
   const keep = $('#f-acc').value;
   $('#f-acc').innerHTML = '<option value="">All accounts</option>' +
     D.accounts.map(a => `<option value="${a.id}">${esc(a.name)}${a.hidden ? ' (hidden)' : ''}</option>`).join('');
@@ -652,7 +652,7 @@ function pairOf(t) {
 function openEditor(t, rem = false) {
   editing = rem ? { F: t, rem } : pairOf(t);
   const F = editing?.F, T = editing?.T;
-  $('#ed-title').textContent = (t ? 'Edit ' : 'Add ') + (rem ? 'reminder' : 'transaction');
+  $('#ed-title').textContent = (t ? 'Edit ' : 'Add ') + (rem ? 'scheduled transaction' : 'transaction');
   $('#ed-rep-wrap').hidden = !rem; $('#ed-void-wrap').hidden = rem; $('#ed-log').hidden = !(rem && t);
   $('#ed-freq').value = F?.freq ?? 4; $('#ed-every').value = F?.every || 1;
   $('#ed-end').value = F?.endType === 3 && F.endDate ? F.endDate.slice(0, 10) : '';
@@ -743,7 +743,7 @@ function saveEditor() {
     }
     const sign = F && F.type === type ? (Math.sign(F.amount) || -1) : (type === 3 ? -1 : 1); // keeps refunds positive when edited
     const r = { item, amount: Math.round(sign * amt / rate * 1e6), tc, rate, date, type, cat: +$('#ed-cat').value, acc: accId, notes, pair: accId, status };
-    if (editing?.rem) { saveReminder(r, labels); return afterChange(F ? 'Reminder updated.' : 'Reminder added.'); }
+    if (editing?.rem) { saveReminder(r, labels); return afterChange(F ? 'Scheduled transaction updated.' : 'Scheduled transaction added.'); }
     if (F) { updateTx(F.id, r); ids = [F.id]; }
     else { const id = newId(); insertTx({ ...r, id, ref: 1, uid: id }); ids = [id]; }
   } else {
@@ -776,7 +776,7 @@ function saveEditor() {
 function deleteEditing() {
   if (editing.rem) {
     D.db.run("update TRANSACTIONSTABLE set deletedTransaction = 5 where reminderGroupID = ? and reminderTransaction = 9", [editing.F.gid]);
-    return afterChange('Reminder deleted.');
+    return afterChange('Scheduled transaction deleted.');
   }
   const ids = [editing.F?.id, editing.T?.id].filter(Boolean);
   D.db.run(`update TRANSACTIONSTABLE set deletedTransaction = 5 where transactionsTableID in (${ids.map(Number).join(',')})`);
