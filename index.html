@@ -189,7 +189,7 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
         <select id="f-type" aria-label="Type">
           <option value="">All types</option><option value="3">Expenses</option><option value="4">Income</option><option value="5">Transfers</option>
         </select>
-        <input id="f-month" type="month" aria-label="Month">
+        <select id="f-month" aria-label="Month"></select>
         <button id="clear" type="button">Clear</button>
       </div>
       <div class="listbar"><span id="summary" class="muted"></span><button id="add" class="primary" type="button">Add transaction</button></div>
@@ -482,6 +482,11 @@ function renderAll() {
   $('#f-acc').innerHTML = '<option value="">All accounts</option>' +
     D.accounts.map(a => `<option value="${a.id}">${esc(a.name)}${a.hidden ? ' (hidden)' : ''}</option>`).join('');
   $('#f-acc').value = keep;
+  // A list of months that have rows, not <input type=month>: Chrome shows it empty as dashes, Firefox and Safari as a plain text box
+  const keepMonth = $('#f-month').value;
+  $('#f-month').innerHTML = '<option value="">All months</option>' +
+    [...new Set(D.list.map(t => t.date.slice(0, 7)))].map(m => `<option value="${m}">${monthName(m)}</option>`).join('');
+  $('#f-month').value = keepMonth;
   $('#items').innerHTML = D.items.map(n => `<option value="${esc(n)}">`).join('');
   renderAccounts(); renderTransactions(); renderReports(); renderTools(); updateSaveUI();
 }
