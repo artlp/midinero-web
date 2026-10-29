@@ -715,7 +715,8 @@ function renderLabelPicks() {
 function fillCategories(selected) {
   const grp = edType() === 4 ? 2 : 3, sel = $('#ed-cat'), keep = selected ?? +sel.value;
   const groups = {};
-  for (const c of D.cats) if (c.grp === grp) (groups[c.parent || c.name] ||= []).push(c);
+  // The row's own category stays offered even outside the group (MiDinero's balance corrections are in group 0)
+  for (const c of D.cats) if (c.grp === grp || c.id === keep) (groups[c.parent || c.name] ||= []).push(c);
   sel.innerHTML = Object.entries(groups).map(([p, cs]) => `<optgroup label="${esc(p)}">${cs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</optgroup>`).join('');
   if ([...sel.options].some(o => +o.value === keep)) sel.value = keep;
 }
