@@ -194,6 +194,7 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
         </select>
         <select id="f-month" aria-label="Month"></select>
         <button id="clear" type="button">Clear</button>
+        <label class="toggle"><input id="hide-adj" type="checkbox"> Hide balance adjustments</label>
       </div>
       <div class="listbar"><span id="summary" class="muted"></span><button id="add" class="primary" type="button">Add transaction</button></div>
       <div id="list"></div>
@@ -276,6 +277,9 @@ const CLIENT_ID ='351651997955-eopu08nr15mu2o1jn3cqvn2lqn8h388s.apps.googleuserc
 // Google Picker: the API key is public by design (locked to this site in Google Cloud); APP_ID is the Cloud project number.
 const PICKER_API_KEY = 'AIzaSyALsvBnjhJwl-0BFdvScPNm67rCXl-KTwk', APP_ID = '351651997955';
 const API = 'https://www.googleapis.com/drive/v3/files', UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+// Balance adjustments: Bluecoins' own ("Adjustment" in Others), MiDinero's "Balance correction" category, or typed by hand
+// shortcut: matched by payee/category name in English, Spanish and Russian; add names here if one slips through
+const ADJ = /^(adjustment|account adjustment|balance (adjustment|correction)|corrección de saldo|правка баланса|коррекция баланса|корректировка баланса)$/i;
 let D = null, shown = 150, dirty = 0, drive = null, editing = null;
 
 // ---------- browser storage (last opened local file) ----------
@@ -292,6 +296,7 @@ function idb(mode, fn) {
   });
 }
 const store = { get: k => { try { return localStorage.getItem(k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(k, v) } catch {} } };
+let hideAdj = store.get('bcw-hide-adj') === '1';
 
 // ---------- formatting ----------
 const fmts = {};
@@ -376,6 +381,7 @@ function derive() {
     t.parent = c ? c.parent || c.name : 'Other';
     t.child = c ? c.name : 'Other';
     t.ico = c?.ico;
+    t.adj = ADJ.test(t.item?.trim() || '') || ADJ.test(t.child);
     t.text = [t.item, t.notes, t.catName, ...t.labels].join(' ').toLowerCase();
   }
 }
@@ -456,6 +462,7 @@ function catFilterLabel(f) {
 function filtered() {
   const q = $('#q').value.trim().toLowerCase(), acc = $('#f-acc').value, type = $('#f-type').value, m = $('#f-month').value;
   return D.list.filter(t => {
+    if (hideAdj && t.adj) return false;
     if (catFilter) {
       if (catFilter.parent && (t.parent !== catFilter.parent || catFilter.child && t.child !== catFilter.child)) return false;
       // from/to are a year "2024", a month "2024-05" or a day "2024-05-17": compare that many characters of the date
@@ -1143,6 +1150,10 @@ async function dbxUpload() {
 $('#file').addEventListener('change', e => { openFile(e.target.files[0]); e.target.value = ''; });
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); });
 $('#show-closed').addEventListener('change', renderAccounts);
+$('#hide-adj').checked = hideAdj;
+// shared with the Reports tab (reports.js calls this too)
+function setHideAdj(on) { hideAdj = on; store.set('bcw-hide-adj', on ? '1' : '0'); $('#hide-adj').checked = on; shown = 150; if (D) { renderTransactions(); renderReports(); } }
+$('#hide-adj').addEventListener('change', e => setHideAdj(e.target.checked));
 $('#groups').addEventListener('click', e => {
   const b = e.target.closest('[data-acc]'); if (!b) return;
   showTransactions({ acc: b.dataset.acc });

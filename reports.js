@@ -1,6 +1,6 @@
 /* MiDinero Web: Reports tab.
    Loaded before the app script; everything below runs only when renderReports() is called,
-   and then uses the app's globals: D, $, esc, money, monthName, hue, showTab, renderTransactions, openEditor.
+   and then uses the app's globals: D, $, esc, money, monthName, hue, showTab, renderTransactions, openEditor, hideAdj, setHideAdj.
    All amounts are in the main currency at the rate saved with each transaction (t.amount).
    Net worth converts balances at the accounts' current rates, like the Accounts tab. */
 (() => {
@@ -55,7 +55,7 @@
   // ---------- data ----------
   const child = t => t.child;
   function base() {
-    return D.list.filter(t => !t.void && (t.type === 3 || t.type === 4)
+    return D.list.filter(t => !t.void && (t.type === 3 || t.type === 4) && !(hideAdj && t.adj)
       && (!S.acc || String(t.acc) === S.acc) && (!S.label || t.labels.includes(S.label)));
   }
   const inRange = (t, [a, b]) => { const m = t.date.slice(0, 7); return m >= a && m <= b; };
@@ -369,6 +369,7 @@
       <span class="r-custom"${S.period === 'custom' ? '' : ' hidden'}><input id="r-from" type="month" value="${rr.r[0]}" aria-label="From"> – <input id="r-to" type="month" value="${rr.r[1]}" aria-label="To"></span>
       <select id="r-acc" aria-label="Account">${opt('', 'All accounts', !S.acc)}${D.accounts.map(a => opt(a.id, a.name + (a.hidden ? ' (hidden)' : ''), String(a.id) === S.acc)).join('')}</select>
       <select id="r-label" aria-label="Tag">${opt('', 'All tags', !S.label)}${labels.map(l => opt(l, l, l === S.label)).join('')}</select>
+      <label class="toggle"><input id="r-hide-adj" type="checkbox"${hideAdj ? ' checked' : ''}> Hide balance adjustments</label>
       ${S.acc || S.label ? '<button type="button" id="r-reset" class="r-link">Clear filters</button>' : ''}
     </div>
     <p class="r-period muted"><b>${rangeLabel(rr.r)}</b>${rr.prev ? ` compared with ${rangeLabel(rr.prev)}` : ''}</p>`;
@@ -412,6 +413,7 @@
       if (id === 'r-to') S.to = e.target.value;
       if (id === 'r-acc') S.acc = e.target.value;
       if (id === 'r-label') S.label = e.target.value;
+      if (id === 'r-hide-adj') { S.drill = null; return setHideAdj(e.target.checked); }
       S.drill = null; persist(); renderReports();
     });
     root.addEventListener('click', e => {
