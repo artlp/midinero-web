@@ -17,13 +17,14 @@
   --display: "Onest", "Segoe UI", system-ui, sans-serif;
   --body: "Onest", "Segoe UI", system-ui, -apple-system, sans-serif;
   --radius: 24px;
+  --ico-mix: 45%; --ico-base: white;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #15131f; --surface: #221f2e; --ink: #edebf7; --muted: #a9a4be; --line: #2e2a3d; --border: #3a3550; --track: #2e2a3d;
-  --accent: #5c8bf3; --accent-soft: #1b274f; --pos: #5cc79e; --neg: #e8806a; --tag-bg: 24%; --tag-fg: 82%; color-scheme: dark } }
+  --accent: #5c8bf3; --accent-soft: #1b274f; --pos: #5cc79e; --neg: #e8806a; --tag-bg: 24%; --tag-fg: 82%; --ico-mix: 65%; --ico-base: black; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #15131f; --surface: #221f2e; --ink: #edebf7; --muted: #a9a4be; --line: #2e2a3d; --border: #3a3550; --track: #2e2a3d;
-  --accent: #5c8bf3; --accent-soft: #1b274f; --pos: #5cc79e; --neg: #e8806a; --tag-bg: 24%; --tag-fg: 82%; color-scheme: dark }
+  --accent: #5c8bf3; --accent-soft: #1b274f; --pos: #5cc79e; --neg: #e8806a; --tag-bg: 24%; --tag-fg: 82%; --ico-mix: 65%; --ico-base: black; color-scheme: dark }
 
 * { box-sizing: border-box }
 [hidden] { display: none !important }
@@ -99,6 +100,7 @@ select, input, textarea { background: var(--surface); border: 1px solid var(--bo
 .tx.void { opacity: .55 }
 .ico { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 1.05rem;
   background: hsl(var(--h) var(--tag-s) var(--tag-bg)); color: hsl(var(--h) var(--tag-s) var(--tag-fg)) }
+.ico[style*="--c:"] { background: color-mix(in srgb, var(--c) var(--ico-mix), var(--ico-base)); color: var(--ink) }
 .ico img { width: 24px; height: 24px }
 .tx-main { display: grid; gap: 3px; min-width: 0 }
 .tx .item { font-size: 1.05rem; font-weight: 500; overflow-wrap: anywhere }
@@ -125,7 +127,8 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
 .ed label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); min-width: 0 }
 .ed label > :is(input, select, textarea) { color: var(--ink); font-size: 15px; width: 100%; background: var(--bg); border-color: transparent }
 .ed .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
-@media (max-width: 480px) { .ed .two { grid-template-columns: 1fr } }
+.ed .two.dt { grid-template-columns: minmax(0, 1fr) 5.8em } /* time is at most "23:59:59" */
+@media (max-width: 480px) { .ed .two { grid-template-columns: 1fr } .ed .two.dt { grid-template-columns: minmax(0, 1fr) 5.8em } }
 .seg { display: flex; gap: 4px; padding: 4px; background: var(--bg); border-radius: 999px }
 .seg label { flex: 1; display: block; position: relative; text-align: center; padding: 8px; border-radius: 999px; cursor: pointer; color: var(--ink); font-size: .9rem }
 .seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer }
@@ -228,7 +231,8 @@ dialog::backdrop { background: rgb(0 0 0 / .5) }
     </div>
     <div class="two">
       <label>Amount <span id="ed-cur"></span><input id="ed-amount" inputmode="decimal" autocomplete="off" required></label>
-      <label>Date<input id="ed-date" type="datetime-local" step="1" required></label>
+      <div class="two dt"><label>Date<input id="ed-date" type="date" required></label>
+        <label>Time<input id="ed-time" inputmode="numeric" placeholder="HH:MM" autocomplete="off" required></label></div>
     </div>
     <div class="two" id="ed-rep-wrap">
       <label>Repeat<select id="ed-freq">
@@ -340,7 +344,11 @@ function derive() {
   const kids = {};
   for (const c of D.cats) kids[c.pid] = (kids[c.pid] || 0) + 1;
   // shortcut: name matches agree with the phone, the four fallback icons go by category id rather than MiDinero's import order
-  for (const c of D.cats) c.ico = iconFor(kids[c.pid] === 1 && c.parent ? c.parent : c.name, c.id, c.icon);
+  for (const c of D.cats) {
+    const m = D.meta?.child?.[c.id] || D.meta?.parent?.[c.pid];
+    c.ico = iconFor(kids[c.pid] === 1 && c.parent ? c.parent : c.name, c.id, m?.icon || c.icon);
+    c.col = /^0x[0-9a-f]{8}$/i.test(m?.colour) ? '#' + m.colour.slice(4) : null; // 0xAARRGGBB
+  }
   D.items = rows("select itemName n from ITEMTABLE where itemAutoFillVisibility = 0 order by itemName").map(r => r.n);
   const labels = {};
   for (const l of rows("select transactionIDLabels id, labelName name from LABELSTABLE where transactionIDLabels is not null")) (labels[l.id] ||= []).push(l.name);
@@ -371,7 +379,7 @@ function derive() {
     where t.deletedTransaction <> 5 and t.reminderTransaction = 9 order by t.date, t.transactionsTableID`)) {
     if (D.groups[t.gid] || !D.acc[t.acc]) continue;
     t.rate = t.rate || 1; t.native = t.amount * t.rate; t.labels = labels[t.id] || [];
-    const c = cats[t.cat]; t.catName = c ? (c.parent && c.parent !== c.name ? c.parent + ' › ' + c.name : c.name) : ''; t.ico = c?.ico;
+    const c = cats[t.cat]; t.catName = c ? (c.parent && c.parent !== c.name ? c.parent + ' › ' + c.name : c.name) : ''; t.ico = c?.ico; t.col = c?.col;
     D.groups[t.gid] = t;
   }
   for (const t of D.list) {
@@ -380,18 +388,19 @@ function derive() {
     t.catName = c ? (c.parent && c.parent !== c.name ? c.parent + ' › ' + c.name : c.name) : '';
     t.parent = c ? c.parent || c.name : 'Other';
     t.child = c ? c.name : 'Other';
-    t.ico = c?.ico;
+    t.ico = c?.ico; t.col = c?.col;
     t.adj = ADJ.test(t.item?.trim() || '') || ADJ.test(t.child);
     t.text = [t.item, t.notes, t.catName, ...t.labels].join(' ').toLowerCase();
   }
 }
 
-async function open(bytes, name, source) {
+// meta: MiDinero's categories.json (icon and colour per Bluecoins category id), when there is one
+async function open(bytes, name, source, meta = null) {
   notice('');
   const SQL = await SQLp;
   const prev = D;
   try {
-    D = { db: new SQL.Database(bytes), name };
+    D = { db: new SQL.Database(bytes), name, meta };
     derive();
   } catch (e) {
     D?.db?.close(); D = prev;
@@ -477,6 +486,7 @@ function filtered() {
 }
 
 // Twemoji image for the row's category (icons.js), or the category's first letter when it has none
+const icoCol = t => t.type !== 5 && t.col ? `;--c:${t.col}` : '';
 const catIcon = t => t.type === 5 ? '⇄' : t.ico ? `<img src="icons/${t.ico}" alt="" loading="lazy">` : esc([...(t.catName || '?')][0].toUpperCase());
 
 function renderTransactions() {
@@ -490,7 +500,7 @@ function renderTransactions() {
     const a = D.acc[t.acc], other = D.acc[t.pair], time = t.date.slice(11, 16);
     const where = t.type === 5 ? (t.ref === 1 ? `${esc(a.name)} → ${esc(other?.name)}` : `${esc(other?.name)} → ${esc(a.name)}`) : esc(a.name);
     return `<button type="button" class="tx${t.void ? ' void' : ''}" data-id="${t.id}">
-      <span class="ico" aria-hidden="true" style="--h:${hue(t.type === 5 ? 'transfer' : t.parent || t.catName || '')}">${catIcon(t)}</span>
+      <span class="ico" aria-hidden="true" style="--h:${hue(t.type === 5 ? 'transfer' : t.parent || t.catName || '')}${icoCol(t)}">${catIcon(t)}</span>
       <span class="tx-main">
         <span class="item">${esc(t.item || t.catName || '—')}${time ? ` <span class="time">· ${time}</span>` : ''}</span>
         <span class="meta">${t.type === 5 ? '<span class="kind">Transfer</span>' : t.catName ? `<span class="cat">${esc(t.catName)}</span>` : ''}${t.void ? '<span class="kind">Not counted</span>' : ''}</span>
@@ -522,7 +532,7 @@ function renderUpcoming() {
   const gs = Object.values(D.groups).sort((a, b) => a.date.localeCompare(b.date));
   $('#up-summary').textContent = `${gs.length} scheduled transactions · not counted in balances or reports`;
   $('#up-list').innerHTML = gs.length ? '<div class="card">' + gs.map(t => `<button type="button" class="tx" data-gid="${t.gid}">
-      <span class="ico" aria-hidden="true" style="--h:${hue(t.catName || '')}">${catIcon(t)}</span>
+      <span class="ico" aria-hidden="true" style="--h:${hue(t.catName || '')}${icoCol(t)}">${catIcon(t)}</span>
       <span class="tx-main">
         <span class="item">${esc(t.item || t.catName || '—')} <span class="time">· ${dayText(t.date)}</span></span>
         <span class="meta"><span class="kind">${esc(repeatText(t))}</span>${t.catName ? `<span class="cat">${esc(t.catName)}</span>` : ''}<span>${esc(D.acc[t.acc].name)}</span></span>
@@ -621,9 +631,10 @@ function showTab(name) {
 }
 
 // ---------- editing ----------
-const toDbDate = v => v ? (v.length === 16 ? v + ':00' : v).replace('T', ' ') : '';
+// Date input + 24-hour "H:MM[:SS]" text → "YYYY-MM-DD HH:MM:SS", or '' when the time is not valid
+const toDbDate = (d, t) => { const m = t.trim().match(/^(\d{1,2})[:.](\d\d)(?:[:.](\d\d))?$/); return d && m && +m[1] < 24 && +m[2] < 60 && +(m[3] || 0) < 60 ? `${d} ${pad(m[1])}:${m[2]}:${m[3] || '00'}` : ''; };
 const pad = n => String(n).padStart(2, '0');
-const nowLocal = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const nowLocal = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 const fmtInput = n => String(Math.round(Math.abs(n) * 100) / 100);
 const edType = () => +document.querySelector('input[name=ed-type]:checked').value;
 // Like Bluecoins, each transaction stores the market rate of its own day. New rows get today's rate
@@ -691,7 +702,7 @@ function openEditor(t, rem = false) {
   $('#ed-to').innerHTML = opts(defTo); $('#ed-to').value = defTo;
   $('#ed-amount').value = F ? fmtInput(F.native) : '';
   $('#ed-recv').value = T && T.tc !== F.tc ? fmtInput(T.native) : '';
-  $('#ed-date').value = F ? F.date.replace(' ', 'T') : nowLocal();
+  [$('#ed-date').value, $('#ed-time').value] = (F ? F.date : nowLocal()).split(' ');
   $('#ed-item').value = F?.item || '';
   $('#ed-notes').value = F?.notes || '';
   $('#ed-labels').value = (F?.labels || []).join(', ');
@@ -744,11 +755,11 @@ function updateEditorUI() {
 
 function saveEditor() {
   const err = m => { $('#ed-err').textContent = m; $('#ed-err').hidden = false; };
-  const type = edType(), amt = num($('#ed-amount').value), accId = +$('#ed-acc').value, date = toDbDate($('#ed-date').value);
+  const type = edType(), amt = num($('#ed-amount').value), accId = +$('#ed-acc').value, date = toDbDate($('#ed-date').value, $('#ed-time').value);
   const itemName = $('#ed-item').value.trim(), notes = $('#ed-notes').value.trim();
   const labels = edLabels();
   if (!(amt > 0)) return err('Enter an amount greater than 0.');
-  if (!/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(date)) return err('Enter a date and time.');
+  if (!/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(date)) return err('Enter a date and a 24-hour time, e.g. 18:30.');
   if (!itemName) return err('Enter a payee.');
   const F = editing?.F, T = editing?.T;
   // status 3 = void (left out of balances); otherwise keep whatever status the app set (e.g. reconciled)
@@ -1118,8 +1129,9 @@ async function dbxOpen(app = dbxApp()) {
       ? `No MiDinero files in Dropbox. MiDinero has to sync once first (it puts bluecoins.fydb and tracker_file in Dropbox › ${MIDINERO_DIR.slice(1)}).`
       : 'No Bluecoins sync files in Dropbox. In Bluecoins, switch sync to Dropbox and sync once, then try again (a folder with tracker_file and a .fydb file is needed).');
     const bytes = new Uint8Array(await (await dfetch('files/download', { path: 'rev:' + files.db.rev })).arrayBuffer());
+    const meta = await dfetch('files/download', { path: MIDINERO_DIR + '/categories.json' }).then(r => r.json()).catch(() => null); // missing until MiDinero syncs
     drive = files;
-    if (await open(bytes, `${files.db.name} (Dropbox)`, 'dropbox')) notice(`Opened ${appName(app)}'s ${files.db.name} from Dropbox, last changed ${new Date(files.db.modifiedTime).toLocaleString()}.`);
+    if (await open(bytes, `${files.db.name} (Dropbox)`, 'dropbox', meta)) notice(`Opened ${appName(app)}'s ${files.db.name} from Dropbox, last changed ${new Date(files.db.modifiedTime).toLocaleString()}.`);
   } catch (e) { notice(e.message, true); }
 }
 
